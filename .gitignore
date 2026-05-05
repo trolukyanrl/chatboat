@@ -1,0 +1,34 @@
+# ─── Dependencies ──────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Environment & Secrets ─────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Build Output ──────────────────────────────────────────
+dist/
+build/
+*.tsbuildinfo
+
+# ─── Uploads & Temporary Files ─────────────────────────────
+backend/data/uploads/
+
+# ─── Logs ──────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+
+# ─── OS Files ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ─── IDE / Editor ──────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
