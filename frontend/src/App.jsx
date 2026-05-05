@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Sidebar, DEPARTMENTS } from './components/Sidebar.jsx';
 import { Message, TypingIndicator } from './components/Message.jsx';
 import { useChat, uploadDocument } from './hooks/useChat.js';
+import { AdminDashboard } from './components/AdminDashboard.jsx';
 
 function WelcomeScreen({ department, onSuggest }) {
   const dept = DEPARTMENTS.find(d => d.id === department) || DEPARTMENTS[0];
@@ -53,6 +54,7 @@ export default function App() {
   const [department, setDepartment] = useState('general');
   const [input, setInput] = useState('');
   const [uploadStatus, setUploadStatus] = useState(null);
+  const [showAdmin, setShowAdmin] = useState(false);
   const { messages, loading, sendMessage, clearChat } = useChat();
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -99,6 +101,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {showAdmin && <AdminDashboard onClose={() => setShowAdmin(false)} />}
       <Sidebar
         active={department}
         onSelect={handleDeptChange}
@@ -128,6 +131,7 @@ export default function App() {
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)' }} />
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>RAG Active</span>
           </div>
+          <button onClick={() => setShowAdmin(true)} style={{ padding:'5px 12px', borderRadius:8, background:'var(--bg3)', border:'1px solid var(--border)', color:'var(--text2)', fontSize:12, cursor:'pointer' }}>⬡ Admin</button>
         </header>
 
         {/* Upload status toast */}
