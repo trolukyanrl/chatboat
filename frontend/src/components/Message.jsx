@@ -166,3 +166,27 @@ export function TypingIndicator() {
     </div>
   );
 }
+
+export function MessageLinks({ links }) {
+  if (!links?.length) return null;
+  return (
+    <div style={{ paddingLeft: 38, marginTop: 8 }}>
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Quick links</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {links.map((l, i) => (
+          <a key={i} href={l.url} target="_blank" rel="noreferrer" title={l.desc} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '4px 10px', borderRadius: 6, fontSize: 12,
+            background: 'var(--bg3)', border: '1px solid var(--border)',
+            color: 'var(--text2)', textDecoration: 'none', transition: 'all 0.15s',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text2)'; }}
+          >
+            <span style={{ fontSize: 10 }}>↗</span> {l.title}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
