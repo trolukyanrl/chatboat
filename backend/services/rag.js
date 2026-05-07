@@ -1,4 +1,4 @@
-// services/rag.js — RAG pipeline with Smart Link injection
+// services/rag.js — RAG pipeline with Smart Link injection + ticket suggestion
 import { queryDocuments } from './vectorStore.js';
 import { generateAnswer } from './llm.js';
 import { findLinks } from './linkNavigator.js';
@@ -11,19 +11,32 @@ const DEPARTMENT_PERSONAS = {
   general: 'Internal assistant for Numaligarh Refinery Limited. You help employees find information, navigate internal portals, and resolve common queries.',
 };
 
+// Keywords that indicate the bot cannot help and a ticket should be suggested
+const TICKET_TRIGGERS = [
+  'not working', 'broken', 'error', 'issue', 'problem', 'can\'t access',
+  'unable to', 'failed', 'not able', 'laptop', 'computer', 'printer',
+  'account locked', 'permission', 'access denied', 'slow', 'crash',
+];
+
+function shouldSuggestTicket(message, answer) {
+  const msgLower = message.toLowerCase();
+  const ansLower = answer.toLowerCase();
+  const hasIssueKeyword = TICKET_TRIGGERS.some(t => msgLower.includes(t));
+  const botUnsure = ansLower.includes("don't have") || ansLower.includes('not sure') ||
+    ansLower.includes('no information') || ansLower.includes('contact') ||
+    ansLower.includes('reach out') || ansLower.includes('helpdesk');
+  return hasIssueKeyword || botUnsure;
+}
+
 function buildSystemPrompt(department, context, links) {
   const persona = DEPARTMENT_PERSONAS[department.toLowerCase()] || DEPARTMENT_PERSONAS.general;
-
   const contextSection = context.length
-    ? `\n\nRELEVANT DOCUMENTS:\n${context.map((c, i) => `[Doc ${i+1}: ${c.source}]\n${c.text}`).join('\n\n---\n\n')}`
+    ? `\n\nRELEVANT DOCUMENTS:\n${context.map((c,i) => `[Doc ${i+1}: ${c.source}]\n${c.text}`).join('\n\n---\n\n')}`
     : '\n\n(No specific documents found in the knowledge base for this query.)';
-
   const linksSection = links.length
-    ? `\n\nRELEVANT INTERNAL LINKS:\n${links.map(l => `- ${l.title}: ${l.url} — ${l.desc}`).join('\n')}\nWhen relevant, include these links in your answer so the employee can navigate directly.`
+    ? `\n\nRELEVANT INTERNAL LINKS:\n${links.map(l=>`- ${l.title}: ${l.url} — ${l.desc}`).join('\n')}\nWhen relevant, include these links in your answer so the employee can navigate directly.`
     : '';
-
   return `You are a helpful ${persona}
-
 GUIDELINES:
 - Answer based on provided documents when available.
 - Be concise and direct. Use bullet points for multi-step answers.
@@ -46,29 +59,27 @@ function chunkText(text, chunkSize = 500, overlap = 50) {
 }
 
 export async function chat(department, message, history = []) {
-  // 1. Retrieve relevant docs + links in parallel
   const [context, links] = await Promise.all([
     queryDocuments(department, message, 5),
     Promise.resolve(findLinks(department, message, 3)),
   ]);
 
-  // 2. Build conversation-aware user message
   const historyText = history.slice(-4)
-    .map(h => `${h.role === 'user' ? 'Employee' : 'Assistant'}: ${h.content}`)
-    .join('\n');
-
+    .map(h => `${h.role==='user' ? 'Employee' : 'Assistant'}: ${h.content}`).join('\n');
   const userMessage = history.length
-    ? `Previous conversation:\n${historyText}\n\nNew question: ${message}`
-    : message;
+    ? `Previous conversation:\n${historyText}\n\nNew question: ${message}` : message;
 
-  // 3. Generate answer
   const systemPrompt = buildSystemPrompt(department, context, links);
   const answer = await generateAnswer(systemPrompt, userMessage);
+
+  // Detect if ticket should be suggested
+  const suggestTicket = shouldSuggestTicket(message, answer);
 
   return {
     answer,
     sources: context.map(c => ({ source: c.source, score: Math.round(c.score * 100) })),
-    links: links.map(l => ({ title: l.title, url: l.url, desc: l.desc })),
+    links:   links.map(l => ({ title: l.title, url: l.url, desc: l.desc })),
+    suggestTicket,
     department,
   };
 }
