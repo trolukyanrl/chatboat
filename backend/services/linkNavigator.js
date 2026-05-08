@@ -1,93 +1,87 @@
-// services/linkNavigator.js
-// Smart Link Navigator — maps keywords to internal NRL portal links
+// services/linkNavigator.js — sql.js backed link navigator
+import { all, get, run, dbReady } from './database.js';
 
-const linkDatabase = {
-  general: [
-    { title: 'NRL Intranet Portal', url: 'http://intranet.nrl.co.in', keywords: ['intranet', 'home', 'portal', 'main', 'nrl'], desc: 'Main NRL intranet homepage' },
-    { title: 'NRL Official Website', url: 'https://www.nrl.co.in', keywords: ['website', 'official', 'nrl', 'company'], desc: 'Official NRL public website' },
-    { title: 'Employee Self Service', url: 'http://ess.nrl.co.in', keywords: ['ess', 'self service', 'employee portal', 'profile'], desc: 'Employee self-service portal' },
-  ],
-  it: [
-    { title: 'IT Helpdesk Portal', url: 'http://helpdesk.nrl.co.in', keywords: ['helpdesk', 'it support', 'ticket', 'raise ticket', 'it issue'], desc: 'Raise and track IT support tickets' },
-    { title: 'VPN Setup Guide', url: 'http://intranet.nrl.co.in/it/vpn', keywords: ['vpn', 'remote access', 'work from home', 'connect remotely'], desc: 'VPN installation and configuration guide' },
-    { title: 'Software Request Form', url: 'http://helpdesk.nrl.co.in/software', keywords: ['software', 'install', 'application', 'request software', 'license'], desc: 'Request new software installation' },
-    { title: 'Password Reset', url: 'http://accounts.nrl.co.in/reset', keywords: ['password', 'reset password', 'forgot password', 'unlock account'], desc: 'Self-service password reset portal' },
-    { title: 'Network Status', url: 'http://status.nrl.co.in', keywords: ['network', 'internet', 'down', 'outage', 'status'], desc: 'Live network and system status' },
-    { title: 'IT Asset Request', url: 'http://helpdesk.nrl.co.in/assets', keywords: ['laptop', 'computer', 'hardware', 'asset', 'equipment', 'mouse', 'keyboard'], desc: 'Request IT hardware and assets' },
-  ],
-  hr: [
-    { title: 'Leave Management System', url: 'http://hrms.nrl.co.in/leave', keywords: ['leave', 'apply leave', 'vacation', 'sick leave', 'casual leave', 'pl', 'el'], desc: 'Apply and track leave requests' },
-    { title: 'Payroll Portal', url: 'http://hrms.nrl.co.in/payroll', keywords: ['payroll', 'salary', 'salary slip', 'pay slip', 'ctc', 'income'], desc: 'View salary slips and payroll details' },
-    { title: 'HRMS Portal', url: 'http://hrms.nrl.co.in', keywords: ['hrms', 'hr portal', 'human resource', 'hr system'], desc: 'Main HR management system' },
-    { title: 'Recruitment Portal', url: 'http://careers.nrl.co.in', keywords: ['recruitment', 'job', 'vacancy', 'apply', 'career', 'hiring', 'referral'], desc: 'Internal job postings and referrals' },
-    { title: 'Training & Development', url: 'http://hrms.nrl.co.in/training', keywords: ['training', 'learning', 'course', 'development', 'skill', 'certification'], desc: 'Training programs and e-learning' },
-    { title: 'Policy Documents', url: 'http://intranet.nrl.co.in/hr/policies', keywords: ['policy', 'policies', 'hr policy', 'rules', 'guidelines', 'handbook'], desc: 'HR policies and employee handbook' },
-    { title: 'Attendance System', url: 'http://hrms.nrl.co.in/attendance', keywords: ['attendance', 'punch', 'biometric', 'timing', 'working hours'], desc: 'Attendance records and regularization' },
-  ],
-  'fire & safety': [
-    { title: 'Safety Management System', url: 'http://safety.nrl.co.in', keywords: ['safety', 'hse', 'health safety', 'fire safety', 'sms'], desc: 'HSE and Safety Management System' },
-    { title: 'Incident Reporting', url: 'http://safety.nrl.co.in/incident', keywords: ['incident', 'accident', 'near miss', 'report incident', 'injury', 'hazard'], desc: 'Report safety incidents and near misses' },
-    { title: 'Permit to Work System', url: 'http://safety.nrl.co.in/ptw', keywords: ['permit', 'work permit', 'ptw', 'hot work', 'confined space', 'height work'], desc: 'Apply for work permits' },
-    { title: 'SOP Library', url: 'http://safety.nrl.co.in/sop', keywords: ['sop', 'procedure', 'standard operating', 'manual', 'safe work'], desc: 'Standard Operating Procedures library' },
-    { title: 'PPE Request', url: 'http://safety.nrl.co.in/ppe', keywords: ['ppe', 'protective equipment', 'helmet', 'gloves', 'safety shoes', 'goggles'], desc: 'Request personal protective equipment' },
-    { title: 'Emergency Contacts', url: 'http://safety.nrl.co.in/emergency', keywords: ['emergency', 'fire station', 'ambulance', 'control room', 'emergency number'], desc: 'Emergency contact numbers and procedures' },
-  ],
-  marketing: [
-    { title: 'Brand Guidelines', url: 'http://intranet.nrl.co.in/marketing/brand', keywords: ['brand', 'logo', 'color', 'font', 'branding', 'identity', 'style guide'], desc: 'NRL brand guidelines and assets' },
-    { title: 'Media Library', url: 'http://intranet.nrl.co.in/marketing/media', keywords: ['media', 'images', 'photos', 'videos', 'assets', 'graphics'], desc: 'Official NRL media and image library' },
-    { title: 'Communication Templates', url: 'http://intranet.nrl.co.in/marketing/templates', keywords: ['template', 'email template', 'letter', 'communication', 'letterhead'], desc: 'Official communication templates' },
-    { title: 'Events Calendar', url: 'http://intranet.nrl.co.in/events', keywords: ['event', 'calendar', 'schedule', 'seminar', 'conference', 'function'], desc: 'Company events and calendar' },
-    { title: 'Press Releases', url: 'http://intranet.nrl.co.in/marketing/press', keywords: ['press', 'press release', 'news', 'announcement', 'media release'], desc: 'Internal press releases and announcements' },
-  ],
-};
+await dbReady;
 
-// Score a link against a query using keyword matching
+// Seed default links if empty
+const count = get('SELECT COUNT(*) AS n FROM portal_links');
+if (!count || count.n === 0) {
+  const links = [
+    ['general','NRL Intranet Portal','http://intranet.nrl.co.in','["intranet","home","portal","main","nrl"]','Main NRL intranet homepage'],
+    ['general','NRL Official Website','https://www.nrl.co.in','["website","official","nrl","company"]','Official NRL public website'],
+    ['general','Employee Self Service','http://ess.nrl.co.in','["ess","self service","employee portal","profile"]','Employee self-service portal'],
+    ['it','IT Helpdesk Portal','http://helpdesk.nrl.co.in','["helpdesk","it support","ticket","raise ticket","it issue"]','Raise and track IT support tickets'],
+    ['it','VPN Setup Guide','http://intranet.nrl.co.in/it/vpn','["vpn","remote access","work from home","connect remotely"]','VPN installation and configuration guide'],
+    ['it','Software Request Form','http://helpdesk.nrl.co.in/software','["software","install","application","request software","license"]','Request new software installation'],
+    ['it','Password Reset','http://accounts.nrl.co.in/reset','["password","reset password","forgot password","unlock account"]','Self-service password reset portal'],
+    ['it','Network Status','http://status.nrl.co.in','["network","internet","down","outage","status"]','Live network and system status'],
+    ['hr','Leave Management System','http://hrms.nrl.co.in/leave','["leave","apply leave","vacation","sick leave","casual leave","pl","el"]','Apply and track leave requests'],
+    ['hr','Payroll Portal','http://hrms.nrl.co.in/payroll','["payroll","salary","salary slip","pay slip","ctc","income"]','View salary slips and payroll details'],
+    ['hr','HRMS Portal','http://hrms.nrl.co.in','["hrms","hr portal","human resource","hr system"]','Main HR management system'],
+    ['hr','Recruitment Portal','http://careers.nrl.co.in','["recruitment","job","vacancy","apply","career","hiring","referral"]','Internal job postings and referrals'],
+    ['hr','Training & Development','http://hrms.nrl.co.in/training','["training","learning","course","development","skill","certification"]','Training programs and e-learning'],
+    ['hr','Policy Documents','http://intranet.nrl.co.in/hr/policies','["policy","policies","hr policy","rules","guidelines","handbook"]','HR policies and employee handbook'],
+    ['hr','Attendance System','http://hrms.nrl.co.in/attendance','["attendance","punch","biometric","timing","working hours"]','Attendance records and regularization'],
+    ['fire & safety','Safety Management System','http://safety.nrl.co.in','["safety","hse","health safety","fire safety","sms"]','HSE and Safety Management System'],
+    ['fire & safety','Incident Reporting','http://safety.nrl.co.in/incident','["incident","accident","near miss","report incident","injury","hazard"]','Report safety incidents and near misses'],
+    ['fire & safety','Permit to Work System','http://safety.nrl.co.in/ptw','["permit","work permit","ptw","hot work","confined space","height work"]','Apply for work permits'],
+    ['fire & safety','SOP Library','http://safety.nrl.co.in/sop','["sop","procedure","standard operating","manual","safe work"]','Standard Operating Procedures library'],
+    ['fire & safety','PPE Request','http://safety.nrl.co.in/ppe','["ppe","protective equipment","helmet","gloves","safety shoes","goggles"]','Request personal protective equipment'],
+    ['fire & safety','Emergency Contacts','http://safety.nrl.co.in/emergency','["emergency","fire station","ambulance","control room","emergency number"]','Emergency contact numbers and procedures'],
+    ['marketing','Brand Guidelines','http://intranet.nrl.co.in/marketing/brand','["brand","logo","color","font","branding","identity","style guide"]','NRL brand guidelines and assets'],
+    ['marketing','Media Library','http://intranet.nrl.co.in/marketing/media','["media","images","photos","videos","assets","graphics"]','Official NRL media and image library'],
+    ['marketing','Communication Templates','http://intranet.nrl.co.in/marketing/templates','["template","email template","letter","communication","letterhead"]','Official communication templates'],
+    ['marketing','Events Calendar','http://intranet.nrl.co.in/events','["event","calendar","schedule","seminar","conference","function"]','Company events and calendar'],
+  ];
+  for (const l of links) {
+    run('INSERT INTO portal_links (department,title,url,keywords,description) VALUES (?,?,?,?,?)', l);
+  }
+  console.log('[DB] Seeded 25 default portal links');
+}
+
 function scoreLink(link, query) {
   const q = query.toLowerCase();
   let score = 0;
-  for (const kw of link.keywords) {
-    if (q.includes(kw)) score += kw.split(' ').length; // multi-word keywords score higher
-  }
-  if (q.includes(link.title.toLowerCase())) score += 3;
+  try {
+    const keywords = JSON.parse(link.keywords || '[]');
+    for (const kw of keywords) if (q.includes(kw)) score += kw.split(' ').length;
+  } catch {}
+  if (q.includes((link.title||'').toLowerCase())) score += 3;
   return score;
 }
 
-// Find relevant links for a query across a department (+ general)
-export function findLinks(department, query, topK = 3) {
-  const deptLinks = linkDatabase[department.toLowerCase()] || [];
-  const generalLinks = linkDatabase.general || [];
-  const allLinks = [...deptLinks, ...generalLinks];
-
-  return allLinks
-    .map(link => ({ ...link, score: scoreLink(link, query) }))
+export function findLinks(department, query, topK=3) {
+  const deptLinks    = all('SELECT * FROM portal_links WHERE department=?', [department.toLowerCase()]);
+  const generalLinks = all('SELECT * FROM portal_links WHERE department=?', ['general']);
+  return [...deptLinks, ...generalLinks]
+    .map(l => ({ ...l, score: scoreLink(l, query), keywords: JSON.parse(l.keywords||'[]') }))
     .filter(l => l.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((a,b) => b.score - a.score)
     .slice(0, topK);
 }
 
-// Get all links for a department (for admin/management)
 export function getDeptLinks(department) {
-  return linkDatabase[department.toLowerCase()] || [];
+  return all('SELECT * FROM portal_links WHERE department=?', [department.toLowerCase()])
+    .map(l => ({ ...l, keywords: JSON.parse(l.keywords||'[]') }));
 }
 
-// Get all departments with links
 export function getAllLinks() {
-  return linkDatabase;
+  const rows = all('SELECT * FROM portal_links ORDER BY department, title');
+  const result = {};
+  rows.forEach(l => {
+    if (!result[l.department]) result[l.department] = [];
+    result[l.department].push({ ...l, keywords: JSON.parse(l.keywords||'[]') });
+  });
+  return result;
 }
 
-// Add a custom link (admin feature)
-export function addLink(department, link) {
-  const dept = department.toLowerCase();
-  if (!linkDatabase[dept]) linkDatabase[dept] = [];
-  linkDatabase[dept].push(link);
-  return { success: true, total: linkDatabase[dept].length };
+export function addLink(department, { title, url, keywords=[], desc='' }) {
+  run('INSERT INTO portal_links (department,title,url,keywords,description) VALUES (?,?,?,?,?)',
+    [department.toLowerCase(), title, url, JSON.stringify(keywords), desc]);
+  return { success: true };
 }
 
-// Delete a link by title
 export function deleteLink(department, title) {
-  const dept = department.toLowerCase();
-  if (!linkDatabase[dept]) return { success: false };
-  const before = linkDatabase[dept].length;
-  linkDatabase[dept] = linkDatabase[dept].filter(l => l.title !== title);
-  return { success: linkDatabase[dept].length < before };
+  run('DELETE FROM portal_links WHERE department=? AND title=?', [department.toLowerCase(), title]);
+  return { success: true };
 }

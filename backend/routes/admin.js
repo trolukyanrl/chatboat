@@ -1,47 +1,36 @@
-// routes/admin.js — Admin dashboard API
+// routes/admin.js — Analytics with sql.js query logs
 import express from 'express';
+import { all, get, run, dbReady } from '../services/database.js';
 import { getStoreStats } from '../services/vectorStore.js';
 import { getProviderInfo } from '../services/llm.js';
 
+await dbReady;
 const router = express.Router();
 
-// In-memory analytics store
-const analytics = {
-  queries: [],       // { dept, question, timestamp, responseTime }
-  totalQueries: 0,
-};
-
-// Called by chat route after every query
 export function logQuery(dept, question, responseTimeMs) {
-  analytics.totalQueries++;
-  analytics.queries.unshift({
-    dept,
-    question: question.slice(0, 120),
-    timestamp: new Date().toISOString(),
-    responseTime: responseTimeMs,
-  });
-  if (analytics.queries.length > 200) analytics.queries.pop();
+  run('INSERT INTO query_logs (department,question,response_time) VALUES (?,?,?)',
+    [dept, question.slice(0,200), responseTimeMs]);
 }
 
-// GET /api/admin/stats
 router.get('/stats', (req, res) => {
-  const kb = getStoreStats();
+  const kb  = getStoreStats();
   const llm = getProviderInfo();
+  const total = (get('SELECT COUNT(*) AS n FROM query_logs') || {}).n || 0;
+  const avgMs = (get('SELECT AVG(response_time) AS avg FROM query_logs') || {}).avg || 0;
 
-  const deptCounts = {};
-  analytics.queries.forEach(q => {
-    deptCounts[q.dept] = (deptCounts[q.dept] || 0) + 1;
-  });
+  const deptRows = all('SELECT department, COUNT(*) AS cnt FROM query_logs GROUP BY department');
+  const queriesByDept = {};
+  deptRows.forEach(r => { queriesByDept[r.department] = r.cnt; });
 
-  const avgResponseTime = analytics.queries.length
-    ? Math.round(analytics.queries.reduce((s, q) => s + q.responseTime, 0) / analytics.queries.length)
-    : 0;
+  const recentQueries = all(
+    'SELECT department AS dept, question, response_time AS responseTime, created_at AS timestamp FROM query_logs ORDER BY created_at DESC LIMIT 20'
+  );
 
   res.json({
-    totalQueries: analytics.totalQueries,
-    avgResponseTimeMs: avgResponseTime,
-    queriesByDept: deptCounts,
-    recentQueries: analytics.queries.slice(0, 20),
+    totalQueries: total,
+    avgResponseTimeMs: Math.round(avgMs),
+    queriesByDept,
+    recentQueries,
     knowledgeBase: kb,
     llm,
     uptime: Math.round(process.uptime()),
